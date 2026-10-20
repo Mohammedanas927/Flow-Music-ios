@@ -1,73 +1,45 @@
-name: Build Flow Music Unsigned IPA
+name: Build Flow Music IPA
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
 
-concurrency:
-  group: flow-music-build-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
+      - name: Get project
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          lfs: false
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Cache Xcode build files
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-xcode-${{ hashFiles('FlowMusic/**', 'FlowMusic.xcodeproj/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
 
-      - name: Verify project and scheme
+      - name: Build app
         run: |
-          test -d FlowMusic.xcodeproj || {
-            echo "::error::FlowMusic.xcodeproj was not found in the repository root."
-            exit 1
-          }
-
-          xcodebuild -list -project FlowMusic.xcodeproj
-
-      - name: Build for iPhone (unsigned)
-        run: |
-          set -o pipefail
-
           xcodebuild \
             -project FlowMusic.xcodeproj \
             -scheme FlowMusic \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath "$RUNNER_TEMP/FlowMusicBuild" \
-            -jobs "$(sysctl -n hw.ncpu)" \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Package unsigned IPA
+      - name: Package IPA
         run: |
-          set -euo pipefail
-
-          APP="$RUNNER_TEMP/FlowMusicBuild/Build/Products/Release-iphoneos/FlowMusic.app"
-
-          test -d "$APP" || {
-            echo "::error::FlowMusic.app was not generated."
-            exit 1
-          }
-
-          mkdir -p "$RUNNER_TEMP/ipa/Payload"
-          ditto "$APP" "$RUNNER_TEMP/ipa/Payload/FlowMusic.app"
-
-          cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/FlowMusic-unsigned.ipa" Payload
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/FlowMusic.app Payload/
+          /usr/bin/zip -qr FlowMusic-unsigned.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -75,6 +47,3 @@ jobs:
           name: FlowMusic-Unsigned-IPA
           path: FlowMusic-unsigned.ipa
           if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-```
