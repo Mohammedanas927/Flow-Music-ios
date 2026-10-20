@@ -1,41 +1,40 @@
-
-name: Build Flow Music iOS
+name: Build Flow Music Unsigned IPA
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 15
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project
-        run: unzip -q FlowMusic-iOS-Starter.zip -d extracted
+      - name: Show Xcode version
+        run: xcodebuild -version
 
-      - name: Build
+      - name: Build for iPhone (unsigned)
         run: |
           xcodebuild \
-            -project extracted/FlowMusic.xcodeproj \
+            -project FlowMusic.xcodeproj \
             -scheme FlowMusic \
-            -sdk iphonesimulator \
-            -configuration Debug \
+            -configuration Release \
+            -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Upload iOS Simulator App
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/FlowMusic.app Payload/
+          /usr/bin/zip -r FlowMusic-unsigned.ipa Payload
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: FlowMusic-iOS-Simulator
-          path: build/Build/Products/Debug-iphonesimulator/FlowMusic.app
-          if-no-files-found: error
-          retention-days: 7
+          name: FlowMusic-Unsigned-IPA
+          path: FlowMusic-unsigned.ipa
