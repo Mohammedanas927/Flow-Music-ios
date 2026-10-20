@@ -1,3 +1,4 @@
+```yaml
 name: Build Flow Music Unsigned IPA
 
 on:
@@ -5,36 +6,76 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: flow-music-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
 
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify project and scheme
+        run: |
+          test -d FlowMusic.xcodeproj || {
+            echo "::error::FlowMusic.xcodeproj was not found in the repository root."
+            exit 1
+          }
+
+          xcodebuild -list -project FlowMusic.xcodeproj
+
       - name: Build for iPhone (unsigned)
         run: |
+          set -o pipefail
+
           xcodebuild \
             -project FlowMusic.xcodeproj \
             -scheme FlowMusic \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            -derivedDataPath "$RUNNER_TEMP/FlowMusicBuild" \
+            -jobs "$(sysctl -n hw.ncpu)" \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             build
 
       - name: Package unsigned IPA
         run: |
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/FlowMusic.app Payload/
-          /usr/bin/zip -r FlowMusic-unsigned.ipa Payload
+          set -euo pipefail
+
+          APP="$RUNNER_TEMP/FlowMusicBuild/Build/Products/Release-iphoneos/FlowMusic.app"
+
+          test -d "$APP" || {
+            echo "::error::FlowMusic.app was not generated."
+            exit 1
+          }
+
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          ditto "$APP" "$RUNNER_TEMP/ipa/Payload/FlowMusic.app"
+
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/FlowMusic-unsigned.ipa" Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: FlowMusic-Unsigned-IPA
           path: FlowMusic-unsigned.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+```
