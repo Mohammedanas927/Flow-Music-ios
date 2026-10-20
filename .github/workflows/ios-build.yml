@@ -1,0 +1,28 @@
+name: Build Flow Music iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract iOS project
+        run: |
+          unzip FlowMusic-iOS-Starter.zip -d extracted
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild \
+            -project extracted/FlowMusic.xcodeproj \
+            -scheme FlowMusic \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
